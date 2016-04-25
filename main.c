@@ -11,13 +11,13 @@ int main() {
     token* a = token_create_float(1.3 , 4, 5);
     token* c = token_create_name("test name", 4, 5);
     token* d = token_create_operator("unary", 6, 6);
-
+/*
     token_print(t);
     token_print(b);
     token_print(a);
     token_print(c);
     token_print(d);
-
+*/
     token_free(a);
     token_free(b);
     token_free(c);
@@ -25,9 +25,9 @@ int main() {
     token_free(t);
     
     printf("\n");
-    token_list* toks = tokenize("ADADA EEE     AA");
+    token_list* toks = tokenize("int main(){ int a= 0; a++; return(0); }");
     print_token_list(toks);
-
+    token_list_free(toks);
     return 1;
 
 }

@@ -96,7 +96,9 @@ token_list* push_token(token_list* list_end, token* t) {
 void token_list_free(token_list* head) {
     token_list* current = head;
     while(current != NULL) {
+         if(current->value != NULL) {
          token_free(current->value);
+         }
          token_list* temp = current;
          current          = temp->next;
          free(temp);  
@@ -121,48 +123,120 @@ int is_number(char c){
   return ( c >= '0' && c <= '9');
 }
 
+typedef int (*continuationf)(char c);
+
+int read_to_buffer(int index,int* buffer_index, char* buffer, continuationf f, const char* input){
+   int to = index;
+   char current = input[index];
+   buffer[*buffer_index] = current;
+   index++;
+   (*buffer_index)++;
+   for(;;) {
+       current = input[index];
+       if(f(current)) {
+           to = index;
+           buffer[(*buffer_index)] = current;
+           (*buffer_index)++;
+           index++;
+       } else {
+           break;
+       }
+   }
+   return to;
+}
+
+int is_name_char(char c) {
+   return (is_number(c) || is_character(c));
+}
+
+int is_not_quotationmark(char c) {
+   return !(c == '\"');
+}
+
+int is_in_str(char c, const char* str) {
+  while(*str != '\0') {
+    if((*str) == c) { return 1; }
+    str++;
+  }
+  return 0;
+}
+
+int is_double_operator(char c) {
+  return is_in_str(c,"><=&|+-");
+}
+
 token_list* tokenize(const char* input) {
   int index, from, to;
   index = 0;
   char current;
-  
+  char buffer[128]; 
   token_list* result = malloc(sizeof(token_list));
   token_list* head   = result;
 
   result->value = NULL;
     
-  current = input[index];
-  while(current != '\0') {
-     //printf("%c", current);
+  while((current = input[index]) != '\0') {
+    
      if(isspace(current)) {
-         //printf("is space");
          index++;
          current = input[index];
-     } else if(is_character(current)){
-         from = index;
-         char buffer[128];
-         buffer[127] = '\0';
-         int buffer_index = 0;
-         buffer[buffer_index] = current;
-         index++;
-         buffer_index++;
-         for(;;) {
-//printf("loopisssa");
-             current = input[index];
-             if(is_character(current) || is_number(current)){
-                  to = index;
-                  buffer[buffer_index] = current;
-                  buffer_index++;
-                  index++;
-             } else {
-                 break;
-             }   
-         }
+         continue;
+     }
+
+     memset(buffer, 0, 128);
+     buffer[127]      = '\0';
+     from             = index;
+     int buffer_index = 0;
+
+    if(is_character(current)){
+         to       = read_to_buffer(index, &buffer_index, buffer, is_name_char, input);
+         index    = to + 1; 
          token* t = token_create_name(buffer,from, to);
          head     = push_token(head, t);
-     }else {
-      printf("Ei tuettu merkki %c", current);
-      break;
+     }else if(is_number(current)) {
+        to        = read_to_buffer(index, &buffer_index, buffer, is_number, input);
+        index     = to + 1;
+        current   = input[index];
+        if(current == '.') {
+             index++;
+             buffer[buffer_index] = '.';
+             buffer_index++;
+             current = input[index];
+             if(!is_number(current)) {
+                printf("Expected number after \".\"");
+                break;
+             }
+             to          = read_to_buffer(index, &buffer_index, buffer, is_number, input);
+             index       = to + 1;
+             float value = atof(buffer);
+             token* t    = token_create_float(value, from, to);
+             head        = push_token(head, t); 
+        } else {
+        int value = atoi(buffer);
+        token* t  = token_create_int(value, from, to);
+        head      = push_token(head, t); 
+        } 
+
+	
+     } else if (current == '\"') {
+          index++;
+          to      = read_to_buffer(index, &buffer_index, buffer, is_not_quotationmark, input);           
+	  index   = to +2;
+          token* t= token_create_string(buffer, from, to);
+          head    = push_token(head, t);
+           
+       } else if(is_double_operator(current)) {
+          to      = read_to_buffer(index, &buffer_index, buffer, is_double_operator,input);    
+          index   = to + 1;
+          token* t= token_create_operator(buffer, from, to);
+          head    = push_token(head, t);
+       } else { //yksittainen operaattori 
+         to = index;
+         buffer[0] = current;
+         buffer[1] = '\0';
+         token* t  = token_create_operator(buffer, from, to);
+         head      = push_token(head, t);
+         index++;
      }
   }
 
